@@ -93,9 +93,9 @@ class ATStatus:
         return is_change_state
 
 class CanvasPaintEventArg:
-    def __init__(self, frame_no:int, frame_img:np.ndarray = None):
+    def __init__(self, frame_no:int, frame_img:np.ndarray = None): # type: ignore
         self.frame_no_  = frame_no
-        self.frame_img_:np.ndarray = None
+        self.frame_img_:np.ndarray = None # type: ignore
         if frame_img is not None:
             self.frame_img_ = copy.deepcopy(frame_img)
         return
@@ -252,6 +252,8 @@ class AnalysisTool:
             self.audio_detect_.extractFeature(self.movie_.audio_)
             self.audio_detect_.makeGraph()
 
+            if os.path.exists("output") == False:
+                os.makedirs("output", exist_ok=True)
             fpath_csv = f"output/{os.path.splitext(path_basename)[0]}_tok.csv"
             self.audio_detect_.dumpFeatureToken(fpath_csv)
 
@@ -267,7 +269,7 @@ class AnalysisTool:
 
     def onPaintFrame(self, event:tk.Event):
         frame_no = 0
-        frame_img:np.ndarray = None
+        frame_img:np.ndarray = None # type: ignore
 
         with self.canvas_event_lock_:
             frame_no = self.canvas_event_arg_.frame_no_
@@ -277,14 +279,14 @@ class AnalysisTool:
         self.showFrame(frame_no, frame_img)
         return
     
-    def sendPaintFrameEvent(self, frame_no:int, frame_img:np.ndarray = None):
+    def sendPaintFrameEvent(self, frame_no:int, frame_img:np.ndarray = None): # type: ignore
         with self.canvas_event_lock_:
             self.canvas_event_arg_ = CanvasPaintEventArg(frame_no, frame_img)
         
         self.canvas_.event_generate("<<PaintFrame>>")
         return 
 
-    def showFrame(self, frame_index:int, frame:np.ndarray=None):
+    def showFrame(self, frame_index:int, frame:np.ndarray=None): # type: ignore
         if self.movie_.isOpened() == True:
             
             ret = True
@@ -299,7 +301,7 @@ class AnalysisTool:
                 img = Image.fromarray(frame_rgb)
                 img = img.resize((AnalysisTool.MOVIE_CANVAS_W, AnalysisTool.MOVIE_CANVAS_H))
                 imgtk = ImageTk.PhotoImage(image=img)
-                self.canvas_.imgtk = imgtk
+                self.canvas_.imgtk = imgtk # type: ignore
                 self.canvas_.config(image=imgtk)
 
                 # txt表示

@@ -23,7 +23,7 @@ class IntEnum0(IntEnum):
 class MovieLoader:
     """ 動画読み込み
     """
-    def __init__(self, movie_fpath:str = None, play_fps=-1.0, num_batch_frame=1):
+    def __init__(self, movie_fpath:str = None, play_fps=-1.0, num_batch_frame=1): # type: ignore
         """ コンストラクタ
 
         Args:
@@ -31,8 +31,8 @@ class MovieLoader:
             play_fps (float, optional)     : 再生速度(fps). Defaults to -1.0.
             num_batch_frame (int, optional): 一度に読み込む（バッチ処理する）フレーム数[frame/cycle]. Defaults to 1.
         """
-        self.cap_:cv2.VideoCapture = None
-        self.audio_:AudioSegment = None
+        self.cap_:cv2.VideoCapture = None # type: ignore
+        self.audio_:AudioSegment = None # type: ignore
         self.cur_frame_no_    = 0
         self.num_cap_frame_   = 0
         self.play_fps_        = play_fps
@@ -45,7 +45,7 @@ class MovieLoader:
 
     def release(self):
         self.cap_.release()
-        self.audio_ = None
+        self.audio_ = None # type: ignore
         self.cur_frame_no_    = 0
         self.num_cap_frame_   = 0
         self.play_fps_        = 0.0
@@ -65,7 +65,7 @@ class MovieLoader:
         if self.cap_ is not None:
             self.cap_.release()
         if self.audio_ is not None:
-            self.audio_ = None
+            self.audio_ = None # type: ignore
 
         self.cap_ = cv2.VideoCapture(movie_fpath)
 
@@ -123,7 +123,7 @@ class MovieLoader:
         self.cur_frame_no_ = int(self.cap_.get(cv2.CAP_PROP_POS_FRAMES)) 
         while (len(ret_batch_frame_nos) < self.num_batch_frame_) and (self.cur_frame_no_ < self.num_cap_frame_):
 
-            img_org:np.ndarray = None
+            img_org:np.ndarray = None # type: ignore
             (_, img_org) = self.cap_.read()
 
             if (img_org is not None) and (self.cur_frame_no_ % self.frame_play_step_ == 0):
@@ -140,7 +140,7 @@ class MovieLoader:
 
 
         # 動画フレーム画像、フレーム番号を返す（バッチ処理分のリスト）
-        return (ret_batch_frame_nos, ret_batch_imgs, ret_audio)
+        return (ret_batch_frame_nos, ret_batch_imgs, ret_audio) # type: ignore
 
     def __len__(self) -> int:
         num_iter = int(self.num_cap_frame_ // (self.num_batch_frame_ * self.frame_play_step_))
@@ -364,7 +364,7 @@ class GraphData:
             y_data = [self.range_y_min_, self.range_y_max_]
 
             if self.plot_xbar_[idx] is not None:
-                self.plot_xbar_[idx].remove()
+                self.plot_xbar_[idx].remove() # type: ignore
 
             (self.plot_xbar_[idx], ) = \
                 self.ax_[idx].plot(x_data, y_data, color="red", alpha=0.5, label="cur time")

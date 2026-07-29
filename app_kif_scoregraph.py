@@ -16,6 +16,10 @@ from typing import List,Tuple,Dict,Any
 import cv2
 import numpy as np
 
+from common import MovieLoader
+from det_shogiwars_move import WarsAudioDetector
+from det_shogiwars_move import cfg as audio_detect_cfg
+
 GRAPH_IMG_PREFIX = "F"
 
 STAT_PARSE_HEADER:int=0
@@ -392,6 +396,31 @@ class RecordSet:
 
         return
 
+    def assignTime(self, move_times:np.ndarray, elapsed_time_for_rest:float, mov_total_sec:float):
+        # move_times[]の時間を割り当て
+        num_records = len(self.records)
+        num_move_times = len(move_times)
+        cur_disp_time_s = float(move_times[0])
+
+        for idx, cur_record in enumerate(self.records):
+            if idx < (num_move_times-1):
+                cur_record.disp_time_s = float(move_times[idx + 0])
+                cur_record.disp_time_e = float(move_times[idx + 1])
+            elif idx == (num_move_times-1):
+                cur_record.disp_time_s = float(move_times[idx + 0])
+                if (num_records - idx) > 0:
+                    # 残り手の平均時間　※最終手が動画時間以内に収まるよう、少し余裕を持たせる(2.0)
+                    elapsed_time_for_rest = (mov_total_sec - cur_record.disp_time_s - 2.0) / (num_records - idx)
+                    # elapsed_time_for_rest /= 2.0
+                cur_record.disp_time_e = cur_record.disp_time_s + elapsed_time_for_rest
+            else:
+                cur_record.disp_time_s = cur_disp_time_s
+                cur_record.disp_time_e = cur_record.disp_time_s + elapsed_time_for_rest
+
+            cur_disp_time_s = cur_record.disp_time_e
+
+        return
+
     def loadKif(self, kif_fpath:str, player_name:str):
 
         with open(kif_fpath,"r", encoding="shift_jis") as kif_file:
@@ -490,10 +519,10 @@ def imread(filename, flags=cv2.IMREAD_COLOR, dtype=np.uint8) -> np.ndarray:
     try:
         n = np.fromfile(filename, dtype)
         img = cv2.imdecode(n, flags)
-        return img
+        return img # type: ignore
     except Exception as e:
         print(e)
-        return None
+        return None # type: ignore
 
 def makeScoreGraph(record_set:RecordSet, kif_dir:str, kif_filename:str) -> str:
     graph_outdir = kif_dir + "/" + kif_filename + "_graph"
@@ -639,38 +668,53 @@ def writeExo(fp:io.TextIOWrapper, idx_obj:int, out_info:Dict[str,Any]):
 
     return
 
-def makeAviutilExoFile(record_set:RecordSet, mov_fpath:str, graph_dirpath:str, kif_fname:str, last_time_s_str=""):
+# def makeAviutilExoFile(record_set:RecordSet, mov_fpath:str, graph_dirpath:str, kif_fname:str, last_time_s_str=""):
+def makeAviutilExoFile(record_set:RecordSet, mov_fpath:str, graph_dirpath:str, kif_fname:str):
 
     # 対局動画をOpen
-    movie = cv2.VideoCapture(mov_fpath)
+    mov = MovieLoader()
+    mov.load(mov_fpath)
+    # movie = cv2.VideoCapture(mov_fpath)
 
-    if movie is not None:
+    # if movie is not None:
+    if mov.isOpened() == True:
 
         mov_fdir  = os.path.dirname(mov_fpath)
         mov_fname = os.path.splitext(os.path.basename(mov_fpath))[0]
 
         # フレーム数やフレームサイズ等を取得
-        num_mov_frame = int(movie.get(cv2.CAP_PROP_FRAME_COUNT))
-        mov_img_w = int(movie.get(cv2.CAP_PROP_FRAME_WIDTH))
-        mov_img_h = int(movie.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        mov_fps = movie.get(cv2.CAP_PROP_FPS)
+        num_mov_frame = mov.getNumFrame()
+        (mov_img_w, mov_img_h) = mov.getFrameSize()
+        mov_fps = mov.getMovieFps()
+        # num_mov_frame = int(mov.cap_.get(cv2.CAP_PROP_FRAME_COUNT))
+        # mov_img_w = int(mov.cap_.get(cv2.CAP_PROP_FRAME_WIDTH))
+        # mov_img_h = int(mov.cap_.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        # mov_fps = mov.cap_.get(cv2.CAP_PROP_FPS)
         mov_ms_per_frame = 1000.0 / mov_fps
         mov_total_sec = float(num_mov_frame) / mov_fps
 
-        # 時刻調整
-        if len(last_time_s_str) > 0:
-            # [時刻ありkifの場合] 最終手の時刻と合うよう調整
-            record_set.adjustTime(last_time_s_str) 
-        else:
-            # [時刻なしkifの場合] 一手毎の時間を均等配分
-            AVE_ELAPSED_TIME_SEC = 6
-            ave_elapsed_time_sec_mov = mov_total_sec / float(len(record_set))
-            # print(f"ave_elapsed_time_sec_mov={ave_elapsed_time_sec_mov}")
+        # 効果音から、各手の時刻を認識
+        wars_audio_detect = WarsAudioDetector(audio_detect_cfg)
+        move_times = wars_audio_detect.extractFeature(mov.audio_)
 
-            if AVE_ELAPSED_TIME_SEC < ave_elapsed_time_sec_mov:
-                record_set.createTime(AVE_ELAPSED_TIME_SEC) 
-            else:
-                record_set.createTime(int(ave_elapsed_time_sec_mov))
+        # 認識した時刻をrecord_setに反映
+        REST_ELAPSED_TIME_SEC = 6
+        record_set.assignTime(move_times, REST_ELAPSED_TIME_SEC, mov_total_sec)
+
+        # 時刻調整
+        # if len(last_time_s_str) > 0:
+        #     # [時刻ありkifの場合] 最終手の時刻と合うよう調整
+        #     record_set.adjustTime(last_time_s_str) 
+        # else:
+        #     # [時刻なしkifの場合] 一手毎の時間を均等配分
+        #     AVE_ELAPSED_TIME_SEC = 6
+        #     ave_elapsed_time_sec_mov = mov_total_sec / float(len(record_set))
+        #     # print(f"ave_elapsed_time_sec_mov={ave_elapsed_time_sec_mov}")
+
+        #     if AVE_ELAPSED_TIME_SEC < ave_elapsed_time_sec_mov:
+        #         record_set.createTime(AVE_ELAPSED_TIME_SEC) 
+        #     else:
+        #         record_set.createTime(int(ave_elapsed_time_sec_mov))
 
         # record_set.debugOut(mov_fdir)
 
@@ -723,7 +767,7 @@ def makeAviutilExoFile(record_set:RecordSet, mov_fpath:str, graph_dirpath:str, k
 
             for idx_mov_frame in range(num_mov_frame):
                 # 対局画像取得
-                ret, mov_img = movie.read()
+                ret, mov_img = mov.cap_.read()
 
                 if ret == True:
 
@@ -776,7 +820,7 @@ def makeAviutilExoFile(record_set:RecordSet, mov_fpath:str, graph_dirpath:str, k
                     ms_now += mov_ms_per_frame
 
 
-        movie.release()
+        mov.release()
 
     return
 
@@ -807,24 +851,26 @@ def main(player_name:str):
 
 
         # ファイルダイアログで対局動画ファイル選択
-        file_type = [("mp4ファイル","*.mp4"),("aviファイル","*.avi")] 
+        file_type = [("aviファイル","*.avi"),("mp4ファイル","*.mp4")] 
         mov_fpath = filedialog.askopenfilename(filetypes = file_type) 
 
         if mov_fpath != "":
             # print(mov_fpath)
 
-            if math.isclose(record_set.getTailRecord().disp_time_e, 0.0) == False:
-                # [時刻ありkifの場合]
-                last_time_s_str = simpledialog.askstring("最終手の時刻入力", "最終手の時刻を入力してください(mm:ss)")
-                while is_mm_ss_format(last_time_s_str) == False:
-                    last_time_s_str = simpledialog.askstring("最終手の時刻入力", "最終手の時刻を入力してください(mm:ss)")
-                    print(last_time_s_str)
+            makeAviutilExoFile(record_set, mov_fpath, outdir_graph, kif_fname)
 
-                makeAviutilExoFile(record_set, mov_fpath, outdir_graph, kif_fname, last_time_s_str)
+            # if math.isclose(record_set.getTailRecord().disp_time_e, 0.0) == False:
+            #     # [時刻ありkifの場合]
+            #     last_time_s_str = simpledialog.askstring("最終手の時刻入力", "最終手の時刻を入力してください(mm:ss)")
+            #     while is_mm_ss_format(last_time_s_str) == False: # type: ignore
+            #         last_time_s_str = simpledialog.askstring("最終手の時刻入力", "最終手の時刻を入力してください(mm:ss)")
+            #         print(last_time_s_str)
+
+            #     makeAviutilExoFile(record_set, mov_fpath, outdir_graph, kif_fname, last_time_s_str) # type: ignore
             
-            else:
-                # [時刻なしkifの場合]
-                makeAviutilExoFile(record_set, mov_fpath, outdir_graph, kif_fname)
+            # else:
+            #     # [時刻なしkifの場合]
+            #     makeAviutilExoFile(record_set, mov_fpath, outdir_graph, kif_fname)
 
     return
 

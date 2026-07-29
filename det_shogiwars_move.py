@@ -23,10 +23,12 @@ class AudioToken:
     TOKEN_ID_START = 1
     VOL_EPS = 1.0
 
+    param_duration_th0_ = 0.0
     param_duration_th1_ = 0.0
     param_duration_th2_ = 0.0
     param_rate_hpf_org_th_ = 0.0
     param_rate_lpf_org_th_ = 0.0
+    param_rate_lpf_hpf_th_ = 0.0
 
     class TKIND(IntEnum0):
         TOK_UNKNOWN = auto()
@@ -59,10 +61,12 @@ class AudioToken:
 
     @classmethod
     def setConfigParam(cls, cfg:Dict[str,Any]):
+        cls.param_duration_th0_ = float(cfg["token_kind_duration_th0"])
         cls.param_duration_th1_ = float(cfg["token_kind_duration_th1"])
         cls.param_duration_th2_ = float(cfg["token_kind_duration_th2"])
         cls.param_rate_hpf_org_th_ = float(cfg["token_kind_rate_hpf_th"])
         cls.param_rate_lpf_org_th_ = float(cfg["token_kind_rate_lpf_th"])
+        cls.param_rate_lpf_hpf_th_ = float(cfg["token_kind_rate_lpf_hpf_th"])
         return
 
     @staticmethod
@@ -109,12 +113,11 @@ class AudioToken:
 
         return ret_str
 
-    def analyze(self, 
-                audio_seg_org:np.ndarray,
-                audio_seg_LPF:np.ndarray,
-                audio_seg_HPF:np.ndarray):
+    def calcTokFeatures(self,
+                        audio_seg_org:np.ndarray,
+                        audio_seg_LPF:np.ndarray,
+                        audio_seg_HPF:np.ndarray):
 
-        # 特徴の統計量算出
         self.volsize_org_ = np.max(audio_seg_org) - np.min(audio_seg_org)
         self.volsize_LPF_ = np.max(audio_seg_LPF) - np.min(audio_seg_LPF)
         self.volsize_HPF_ = np.max(audio_seg_HPF) - np.min(audio_seg_HPF)
@@ -128,29 +131,41 @@ class AudioToken:
         if self.volsize_LPF_ > AudioToken.VOL_EPS:
             self.audio_rate_HPF_LPF_ = self.volsize_HPF_ / self.volsize_LPF_
 
+        return
+    
+    def analyze(self, 
+                audio_seg_org:np.ndarray,
+                audio_seg_LPF:np.ndarray,
+                audio_seg_HPF:np.ndarray) -> TKIND:
+
+        # 特徴の統計量算出
+        self.calcTokFeatures(audio_seg_org, audio_seg_LPF, audio_seg_HPF)
+
         # カテゴリ分類（未分類のものをここで分類）
         if self.tok_kind_ == AudioToken.TKIND.TOK_UNKNOWN:
 
-            if self.duration_ < AudioToken.param_duration_th1_:
-                # [durationが短い] 通常手
-                self.tok_kind_ = AudioToken.TKIND.TOK_MOVE1
-            elif self.duration_ > AudioToken.param_duration_th2_:
-                # [durationが長い] 対局終了
-                self.tok_kind_ = AudioToken.TKIND.TOK_END1
-            else:
+            if self.duration_ > AudioToken.param_duration_th0_:
 
-                if self.audio_rate_HPF_org_ < AudioToken.param_rate_hpf_org_th_:
-                    # [高周波成分が少ない] 時間読み上げ
-                    self.tok_kind_ = AudioToken.TKIND.TOK_TIME
+                if self.duration_ < AudioToken.param_duration_th1_:
+                    # [durationが短い] 通常手
+                    self.tok_kind_ = AudioToken.TKIND.TOK_MOVE1
+                elif self.duration_ > AudioToken.param_duration_th2_:
+                    # [durationが長い] 対局終了
+                    self.tok_kind_ = AudioToken.TKIND.TOK_END1
                 else:
-                    if self.audio_rate_LPF_org_ < AudioToken.param_rate_lpf_org_th_:
-                        # [高周波成分多め ＆ 低周波成分が少なめ] エフェクト
-                        self.tok_kind_ = AudioToken.TKIND.TOK_EFECT
-                    else:
-                        # [高周波成分多め ＆ 低周波成分が多め] 駒を取ったときの効果音
-                        self.tok_kind_ = AudioToken.TKIND.TOK_MOVE2
 
-        return
+                    if self.audio_rate_HPF_org_ < AudioToken.param_rate_hpf_org_th_:
+                        # [高周波成分が少ない] 時間読み上げ
+                        self.tok_kind_ = AudioToken.TKIND.TOK_TIME
+                    else:
+                        if self.audio_rate_LPF_org_ < AudioToken.param_rate_lpf_org_th_:
+                            # [高周波成分多め ＆ 低周波成分が少なめ] エフェクト
+                            self.tok_kind_ = AudioToken.TKIND.TOK_EFECT
+                        else:
+                            # [高周波成分多め ＆ 低周波成分が多め] 駒を取ったときの効果音
+                            self.tok_kind_ = AudioToken.TKIND.TOK_MOVE2
+
+        return self.tok_kind_
   
 
 class WarsAudioDetector:
@@ -167,13 +182,13 @@ class WarsAudioDetector:
         self.audio_fps_ = float(cfg["audio_fps"]) 
         self.audio_sample_fps_ = self.audio_fps_
 
-        self.audio_data_org_ :np.ndarray = None
-        self.audio_data_LPF_ :np.ndarray = None
-        self.audio_data_HPF_ :np.ndarray = None
+        self.audio_data_org_ :np.ndarray = None # type: ignore
+        self.audio_data_LPF_ :np.ndarray = None # type: ignore
+        self.audio_data_HPF_ :np.ndarray = None # type: ignore
 
-        self.audio_token_ids_:np.ndarray = None
-        self.audio_tokens_:List[AudioToken] = None
-        self.move_times_:np.ndarray = None
+        self.audio_token_ids_:np.ndarray = None # type: ignore
+        self.audio_tokens_:List[AudioToken] = None # type: ignore
+        self.move_times_:np.ndarray = None # type: ignore
 
         self.audio_duration_sec_ = 0.0
 
@@ -196,12 +211,12 @@ class WarsAudioDetector:
         return
 
     def release(self):
-        self.audio_data_org_ = None
-        self.audio_data_LPF_ = None
-        self.audio_data_HPF_ = None
-        self.audio_token_ids_ = None
-        self.audio_tokens_ = None
-        self.move_times_ = None
+        self.audio_data_org_ = None # type: ignore
+        self.audio_data_LPF_ = None # type: ignore
+        self.audio_data_HPF_ = None # type: ignore
+        self.audio_token_ids_ = None # type: ignore
+        self.audio_tokens_ = None # type: ignore
+        self.move_times_ = None # type: ignore
         return
 
     @staticmethod
@@ -296,8 +311,17 @@ class WarsAudioDetector:
 
     def analyzeTokens(self, token_list:List[AudioToken]) -> np.ndarray:
 
+        cnt_move1 = 0
+        ave_duration_move1 = 0.0
+
+        # ノイズtoken(＝durationが短いtoken)消去
+        token_list_org = copy.deepcopy(token_list)
+        token_list = [token for token in token_list_org 
+                            if token.duration_ > AudioToken.param_duration_th0_]
+
         # token分類
-        for token in token_list:
+        for idx, token in enumerate(token_list):
+            
             token_idx_s = self.convTime2Idx(token.time_s_)
             token_idx_e = self.convTime2Idx(token.time_e_)
 
@@ -305,7 +329,62 @@ class WarsAudioDetector:
             audio_seg_LPF = self.audio_data_LPF_[token_idx_s:token_idx_e]
             audio_seg_HPF = self.audio_data_HPF_[token_idx_s:token_idx_e]
 
-            token.analyze(audio_seg_org, audio_seg_LPF, audio_seg_HPF)
+            tok_kind= token.analyze(audio_seg_org, audio_seg_LPF, audio_seg_HPF)
+
+            if tok_kind == AudioToken.TKIND.TOK_MOVE1:
+                ave_duration_move1 += token.time_e_ - token.time_s_
+                cnt_move1 += 1
+
+        # token分類2
+        #   EFECT末尾に、MOVE1が含まれていれば分離
+        if cnt_move1 > 0:
+            ave_duration_move1 /= float(cnt_move1)
+
+        insert_toks:List[Tuple[int,AudioToken]] = []
+
+        for idx, token in enumerate(token_list):
+            if (token.tok_kind_ == AudioToken.TKIND.TOK_EFECT) \
+                and (token.duration_ > ave_duration_move1):
+
+                ptok_time_s = token.time_e_ - ave_duration_move1
+                ptok_time_e = token.time_e_
+                ptok_idx_s = self.convTime2Idx(ptok_time_s)
+                ptok_idx_e = self.convTime2Idx(ptok_time_e)
+
+                audio_seg_org = self.audio_data_org_[ptok_idx_s:ptok_idx_e]
+                audio_seg_LPF = self.audio_data_LPF_[ptok_idx_s:ptok_idx_e]
+                audio_seg_HPF = self.audio_data_HPF_[ptok_idx_s:ptok_idx_e]
+
+                ptok_move1 = AudioToken(token.id_, 
+                                        ptok_time_s,
+                                        ptok_time_e,
+                                        AudioToken.TKIND.TOK_MOVE1)
+
+                ptok_move1.calcTokFeatures(audio_seg_org, audio_seg_LPF, audio_seg_HPF)
+
+                if ptok_move1.audio_rate_HPF_LPF_ > AudioToken.param_rate_lpf_hpf_th_:
+                    # [EFECT末尾の高周波/低周波割合が高い] EFECT末尾＝MOVE1
+                    token.time_e_ = ptok_time_s
+                    token.duration_ = token.time_e_ - token.time_s_
+
+                    insert_toks.append((idx+1, ptok_move1))
+
+        # 分離したtokenを挿入
+        #   挿入後は後ろのindexがずれるので、indexが大きい方から順に挿入
+        for insert_tok in reversed(insert_toks):
+            loc = insert_tok[0]
+            tok = insert_tok[1]
+            token_list.insert(loc, tok)
+
+        # ID振りなおし
+        self.audio_token_ids_[:] = AudioToken.TOKEN_ID_NONE
+
+        for idx, token in enumerate(token_list):
+            token.id_ = idx + AudioToken.TOKEN_ID_START
+
+            idx_time_s = self.convTime2Idx(token.time_s_)
+            idx_time_e = self.convTime2Idx(token.time_e_)
+            self.audio_token_ids_[idx_time_s:idx_time_e] = token.id_
 
         # 手を指した時刻を算出
         move_times = []
@@ -326,7 +405,7 @@ class WarsAudioDetector:
         return np.array(move_times)
 
 
-    def extractFeature(self, audio:AudioSegment):
+    def extractFeature(self, audio:AudioSegment) -> np.ndarray:
 
         self.audio_data_org_ = np.array(audio.get_array_of_samples())[::audio.channels]
 
@@ -368,7 +447,7 @@ class WarsAudioDetector:
             (self.audio_token_ids_, self.audio_tokens_) = self.extractTokens(self.audio_data_org_)
             self.move_times_ = self.analyzeTokens(self.audio_tokens_)
 
-        return 
+        return self.move_times_
 
     def convTime2Idx(self, time_cur_sec:float) -> int:
         idx = int(time_cur_sec * self.audio_sample_fps_)
@@ -497,10 +576,12 @@ cfg = {
     "token_s_th": 20.0,  # token分割閾値(token開始)
     "token_e_th":  5.0,  # token分割閾値(token終了)
 
+    "token_kind_duration_th0": 0.2, # token分類閾値: duration0(ノイズ分類)
     "token_kind_duration_th1": 0.5, # token分類閾値: duration1
     "token_kind_duration_th2": 4.0, # token分類閾値: duration2
-    "token_kind_rate_hpf_th" : 0.2, # token分類閾値: 高周波割合(hpf/org)
+    "token_kind_rate_hpf_th" : 0.1, # token分類閾値: 高周波割合(hpf/org)
     "token_kind_rate_lpf_th" : 0.7, # token分類閾値: 低周波割合(lpf/org)
+    "token_kind_rate_lpf_hpf_th" : 0.6, # token分類閾値: 高周波,低周波割合(hpf/lpf)
 
     "move_time_start_offset" : 0.51, # 手を指した時刻算出: 開始token(OPEN3)時刻offset
 
