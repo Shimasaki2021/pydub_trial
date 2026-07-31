@@ -236,11 +236,12 @@ class WarsAudioDetector:
         # 最小値→最大値の順で並べた配列を作る
         out_data = np.column_stack([mins, maxs]).ravel()
 
-        # 切り捨てた部分の最大値と最小値を取得し、末尾にマージ
-        chunks = in_data[n:len(in_data)]
-        min = chunks.min()
-        max = chunks.max()
-        out_data = np.append(out_data, [min, max])
+        if n != len(in_data):
+            # [データ長が step の倍数でない場合] 切り捨てた部分の最大値と最小値を取得し、末尾にマージ
+            chunks = in_data[n:len(in_data)]
+            min = chunks.min()
+            max = chunks.max()
+            out_data = np.append(out_data, [min, max])
 
         return out_data
 
@@ -315,7 +316,7 @@ class WarsAudioDetector:
 
         return (token_ids, token_list)
 
-    def analyzeTokens(self, token_list:List[AudioToken]) -> np.ndarray:
+    def analyzeTokens(self, token_list:List[AudioToken]) -> Tuple[np.ndarray,List[AudioToken]]:
 
         cnt_move1 = 0
         ave_duration_move1 = 0.0
@@ -408,7 +409,7 @@ class WarsAudioDetector:
 
                 move_times.append(move_time)
 
-        return np.array(move_times)
+        return (np.array(move_times), token_list)
 
 
     def extractFeature(self, audio:AudioSegment) -> np.ndarray:
@@ -451,7 +452,7 @@ class WarsAudioDetector:
 
             # token認識＆手を指した時刻を算出
             (self.audio_token_ids_, self.audio_tokens_) = self.extractTokens(self.audio_data_org_)
-            self.move_times_ = self.analyzeTokens(self.audio_tokens_)
+            (self.move_times_, self.audio_tokens_) = self.analyzeTokens(self.audio_tokens_)
 
         return self.move_times_
 
@@ -510,7 +511,7 @@ class WarsAudioDetector:
 
             tms = 0.0
             tme = self.audio_duration_sec_
-            tm = np.linspace(tms, tme, len(self.audio_data_org_), endpoint=False) # 時間numpy配列を作成
+            tm = np.linspace(tms, tme, len(self.audio_data_org_), endpoint=True) # 時間numpy配列を作成
 
             self.graph_data_.setRangeX(tms, tme)
             self.graph_data_.setRangeY(np.min(self.audio_data_org_),
