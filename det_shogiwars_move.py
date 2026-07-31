@@ -236,6 +236,12 @@ class WarsAudioDetector:
         # 最小値→最大値の順で並べた配列を作る
         out_data = np.column_stack([mins, maxs]).ravel()
 
+        # 切り捨てた部分の最大値と最小値を取得し、末尾にマージ
+        chunks = in_data[n:len(in_data)]
+        min = chunks.min()
+        max = chunks.max()
+        out_data = np.append(out_data, [min, max])
+
         return out_data
 
     def extractTokens(self,
