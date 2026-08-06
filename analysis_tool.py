@@ -134,6 +134,9 @@ class AnalysisTool:
         # 終了時のハンドラ
         self.main_win_.protocol('WM_DELETE_WINDOW', self.destroy)
 
+        # フォーカス
+        self.main_win_.bind("<FocusIn>", self.onFocusMainWin)
+
         # キー入力
         self.main_win_.bind("<KeyPress>", self.onPressKey)
 
@@ -185,6 +188,9 @@ class AnalysisTool:
 
         # 終了時のハンドラ
         self.sub_win_.protocol('WM_DELETE_WINDOW', self.destroy)
+
+        # フォーカス
+        self.sub_win_.bind("<FocusIn>", self.onFocusSubWin)
 
         # キー入力
         self.sub_win_.bind("<KeyPress>", self.onPressKey)
@@ -331,6 +337,18 @@ class AnalysisTool:
 
                 self.audio_token_label_.config(text=f"{audio_token}")
 
+        return
+
+    def onFocusMainWin(self, e:tk.Event):
+        # Sub Windowを前面に
+        self.sub_win_.attributes("-topmost", True)
+        self.sub_win_.attributes("-topmost", False) # これをしないと他Windowがずっと前面に出れなくなる
+        return
+
+    def onFocusSubWin(self, e:tk.Event):
+        # Main Windowを前面に
+        self.main_win_.attributes("-topmost", True)
+        self.main_win_.attributes("-topmost", False) # これをしないと他Windowがずっと前面に出れなくなる
         return
 
     def onPressKey(self, e:tk.Event):
