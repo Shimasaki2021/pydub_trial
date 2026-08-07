@@ -172,8 +172,8 @@ class WarsAudioDetector:
 
     class GID(IntEnum0):
         GRAPH_ORG  = auto()
-        # GRAPH_LPF  = auto()
-        # GRAPH_HPF  = auto()
+        GRAPH_LPF  = auto()
+        GRAPH_HPF  = auto()
         GRAPH_TOK  = auto()
         GRAPH_MOVTM = auto()
         NUM_GRAPH  = auto()
@@ -193,7 +193,7 @@ class WarsAudioDetector:
         self.audio_duration_sec_ = 0.0
 
         self.graph_data_ = GraphData(int(cfg["graph_w_px"]), 
-                                     int(cfg["graph_h_px"]),
+                                     int(cfg["graph_h_px_one"]),
                                      WarsAudioDetector.GID.NUM_GRAPH, 
                                      1)
 
@@ -343,14 +343,15 @@ class WarsAudioDetector:
                 cnt_move1 += 1
 
         # token分類2
-        #   EFECT末尾に、MOVE1が含まれていれば分離
+        #   (EFECT or MOVE2)の末尾に、MOVE1が含まれていれば分離
         if cnt_move1 > 0:
             ave_duration_move1 /= float(cnt_move1)
 
         insert_toks:List[Tuple[int,AudioToken]] = []
 
         for idx, token in enumerate(token_list):
-            if (token.tok_kind_ == AudioToken.TKIND.TOK_EFECT) \
+            if      (   (token.tok_kind_ == AudioToken.TKIND.TOK_EFECT) \
+                     or (token.tok_kind_ == AudioToken.TKIND.TOK_MOVE2)) \
                 and (token.duration_ > ave_duration_move1):
 
                 ptok_time_s = token.time_e_ - ave_duration_move1
@@ -370,7 +371,7 @@ class WarsAudioDetector:
                 ptok_move1.calcTokFeatures(audio_seg_org, audio_seg_LPF, audio_seg_HPF)
 
                 if ptok_move1.audio_rate_HPF_LPF_ > AudioToken.param_rate_lpf_hpf_th_:
-                    # [EFECT末尾の高周波/低周波割合が高い] EFECT末尾＝MOVE1
+                    # [EFECT末尾の高周波/低周波割合が高い] EFECT or MOVE2末尾＝MOVE1
                     token.time_e_ = ptok_time_s
                     token.duration_ = token.time_e_ - token.time_s_
 
@@ -520,11 +521,11 @@ class WarsAudioDetector:
             self.graph_data_.setData(WarsAudioDetector.GID.GRAPH_ORG,0,tm,self.audio_data_org_,"black","input",True) 
             self.graph_data_.setLegend(WarsAudioDetector.GID.GRAPH_ORG,0)
 
-            # self.graph_data_.setData(WarsAudioDetector.GID.GRAPH_LPF,0,tm,self.audio_data_LPF_,"blue","LPF",True) 
-            # self.graph_data_.setLegend(WarsAudioDetector.GID.GRAPH_LPF,0)
+            self.graph_data_.setData(WarsAudioDetector.GID.GRAPH_LPF,0,tm,self.audio_data_LPF_,"blue","LPF",True) 
+            self.graph_data_.setLegend(WarsAudioDetector.GID.GRAPH_LPF,0)
 
-            # self.graph_data_.setData(WarsAudioDetector.GID.GRAPH_HPF,0,tm,self.audio_data_HPF_,"orange","HPF",True)
-            # self.graph_data_.setLegend(WarsAudioDetector.GID.GRAPH_HPF,0)
+            self.graph_data_.setData(WarsAudioDetector.GID.GRAPH_HPF,0,tm,self.audio_data_HPF_,"orange","HPF",True)
+            self.graph_data_.setLegend(WarsAudioDetector.GID.GRAPH_HPF,0)
 
             if self.audio_token_ids_ is not None:
                 self.graph_data_.setData(WarsAudioDetector.GID.GRAPH_TOK,0,tm,self.audio_token_ids_,"purple","token id",False)
@@ -551,6 +552,29 @@ class WarsAudioDetector:
         self.graph_data_.changeRangeX(x_center, delta_sign)
         return
 
+    def dumpFeature(self, fpath:str):
+        if (self.audio_data_org_ is not None) \
+            and (self.audio_data_LPF_ is not None) \
+            and (self.audio_data_HPF_ is not None):
+
+            with open(fpath,"w") as fp:
+                # ヘッダ
+                line_str  = f"time[sec],data_org,data_LPF,data_HPF\n"
+                fp.write(line_str)
+
+                for idx,(org,lpf,hpf) in enumerate(zip(self.audio_data_org_, 
+                                                       self.audio_data_LPF_, 
+                                                       self.audio_data_HPF_)):
+
+                    time_cur = self.convIdx2Time(idx)
+                    line_str  = f"{time_cur},"
+                    line_str += f"{org},"
+                    line_str += f"{lpf},"
+                    line_str += f"{hpf}\n"
+                    fp.write(line_str)
+
+        return
+
     def dumpFeatureToken(self, fpath:str):
 
         if self.audio_tokens_ is not None:
@@ -574,6 +598,7 @@ class WarsAudioDetector:
         return
 
 
+
 # WarsAudioDetectorのconfig
 #   将棋ウォーズ対局動画専用（BGM OFF, 効果音のみON ）parameter
 cfg = {
@@ -583,7 +608,7 @@ cfg = {
     "token_s_th": 20.0,  # token分割閾値(token開始)
     "token_e_th":  5.0,  # token分割閾値(token終了)
 
-    "token_kind_duration_th0": 0.2, # token分類閾値: duration0(ノイズ分類)
+    "token_kind_duration_th0": 0.3, # token分類閾値: duration0(ノイズ分類)
     "token_kind_duration_th1": 0.5, # token分類閾値: duration1
     "token_kind_duration_th2": 4.0, # token分類閾値: duration2
     "token_kind_rate_hpf_th" : 0.1, # token分類閾値: 高周波割合(hpf/org)
@@ -593,7 +618,7 @@ cfg = {
     "move_time_start_offset" : 0.51, # 手を指した時刻算出: 開始token(OPEN3)時刻offset
 
     "graph_w_px" : 800,
-    "graph_h_px" : 200*3,
+    "graph_h_px_one" : 150,
 }
 
 if __name__ == "__main__":

@@ -260,8 +260,10 @@ class AnalysisTool:
 
             if os.path.exists("output") == False:
                 os.makedirs("output", exist_ok=True)
-            fpath_csv = f"output/{os.path.splitext(path_basename)[0]}_tok.csv"
-            self.audio_detect_.dumpFeatureToken(fpath_csv)
+            fpath_csv_feat = f"output/{os.path.splitext(path_basename)[0]}_feat.csv"
+            fpath_csv_tok  = f"output/{os.path.splitext(path_basename)[0]}_tok.csv"
+            self.audio_detect_.dumpFeature(fpath_csv_feat)
+            self.audio_detect_.dumpFeatureToken(fpath_csv_tok)
 
             # 状態遷移
             self.transState(ATEvent.OPEN_MOVIE_)

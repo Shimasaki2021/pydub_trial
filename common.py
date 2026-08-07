@@ -267,7 +267,7 @@ class GraphData:
         GTYPE_SCATTER = auto()
 
 
-    def __init__(self, graph_w_px:int, graph_h_px:int, num_row:int, num_col:int):
+    def __init__(self, graph_w_px:int, graph_h_px_one:int, num_row:int, num_col:int):
         self.num_row_ = num_row
         self.num_col_ = num_col
         self.num_ax_ = self.num_row_ * self.num_col_
@@ -276,7 +276,7 @@ class GraphData:
         self.range_y_max_ = 0.0
 
         graph_w_inch = float(graph_w_px) / GraphData.GRAPH_INCH
-        graph_h_inch = float(graph_h_px) / GraphData.GRAPH_INCH
+        graph_h_inch = (float(graph_h_px_one) * float(num_row)) / GraphData.GRAPH_INCH
 
         self.fig_ = plt.figure(figsize=(graph_w_inch, graph_h_inch))
 
