@@ -512,7 +512,7 @@ class WarsAudioDetector:
 
             tms = 0.0
             tme = self.audio_duration_sec_
-            tm = np.linspace(tms, tme, len(self.audio_data_org_), endpoint=True) # 時間numpy配列を作成
+            tm = [self.convIdx2Time(idx) for idx,_ in enumerate(self.audio_data_org_)] 
 
             self.graph_data_.setRangeX(tms, tme)
             self.graph_data_.setRangeY(np.min(self.audio_data_org_),
