@@ -380,11 +380,12 @@ class GraphData:
 
             # legend("upper left")がなぜか上手くいかないので、手動で凡例を描画
             _, labels = self.ax_[idx].get_legend_handles_labels()
-            self.ax_[idx].text(0.01, 0.99, 
+            self.ax_[idx].text(0.01, 0.93, 
                                labels[0], 
                                va="top", 
                                transform=self.ax_[idx].transAxes, 
                                color="black", 
-                               fontweight="bold")
+                               fontweight="bold",
+                               bbox=dict(facecolor=(1, 1, 1, 0.8), edgecolor='none'))
         return
 
