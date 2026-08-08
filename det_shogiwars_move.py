@@ -182,13 +182,13 @@ class WarsAudioDetector:
         self.audio_fps_ = float(cfg["audio_fps"]) 
         self.audio_sample_fps_ = self.audio_fps_
 
-        self.audio_data_org_ :np.ndarray = None # type: ignore
-        self.audio_data_LPF_ :np.ndarray = None # type: ignore
-        self.audio_data_HPF_ :np.ndarray = None # type: ignore
+        self.audio_data_org_ :np.ndarray|None = None
+        self.audio_data_LPF_ :np.ndarray|None = None
+        self.audio_data_HPF_ :np.ndarray|None = None 
 
-        self.audio_token_ids_:np.ndarray = None # type: ignore
-        self.audio_tokens_:List[AudioToken] = None # type: ignore
-        self.move_times_:np.ndarray = None # type: ignore
+        self.audio_token_ids_:np.ndarray|None = None
+        self.audio_tokens_:List[AudioToken]|None = None
+        self.move_times_:np.ndarray|None = None
 
         self.audio_duration_sec_ = 0.0
 
@@ -211,12 +211,12 @@ class WarsAudioDetector:
         return
 
     def release(self):
-        self.audio_data_org_ = None # type: ignore
-        self.audio_data_LPF_ = None # type: ignore
-        self.audio_data_HPF_ = None # type: ignore
-        self.audio_token_ids_ = None # type: ignore
-        self.audio_tokens_ = None # type: ignore
-        self.move_times_ = None # type: ignore
+        self.audio_data_org_ = None
+        self.audio_data_LPF_ = None
+        self.audio_data_HPF_ = None 
+        self.audio_token_ids_ = None
+        self.audio_tokens_ = None
+        self.move_times_ = None
         return
 
     @staticmethod
@@ -318,102 +318,107 @@ class WarsAudioDetector:
 
     def analyzeTokens(self, token_list:List[AudioToken]) -> Tuple[np.ndarray,List[AudioToken]]:
 
-        cnt_move1 = 0
-        ave_duration_move1 = 0.0
+        if (self.audio_data_org_ is not None) \
+            and (self.audio_data_LPF_ is not None) \
+            and (self.audio_data_HPF_ is not None) \
+            and (self.audio_token_ids_ is not None):
 
-        # ノイズtoken(＝durationが短いtoken)消去
-        token_list_org = copy.deepcopy(token_list)
-        token_list = [token for token in token_list_org 
-                            if token.duration_ > AudioToken.param_duration_th0_]
+            cnt_move1 = 0
+            ave_duration_move1 = 0.0
 
-        # token分類
-        for idx, token in enumerate(token_list):
-            
-            token_idx_s = self.convTime2Idx(token.time_s_)
-            token_idx_e = self.convTime2Idx(token.time_e_)
+            # ノイズtoken(＝durationが短いtoken)消去
+            token_list_org = copy.deepcopy(token_list)
+            token_list = [token for token in token_list_org 
+                                if token.duration_ > AudioToken.param_duration_th0_]
 
-            audio_seg_org = self.audio_data_org_[token_idx_s:token_idx_e]
-            audio_seg_LPF = self.audio_data_LPF_[token_idx_s:token_idx_e]
-            audio_seg_HPF = self.audio_data_HPF_[token_idx_s:token_idx_e]
+            # token分類
+            for idx, token in enumerate(token_list):
+                
+                token_idx_s = self.convTime2Idx(token.time_s_)
+                token_idx_e = self.convTime2Idx(token.time_e_)
 
-            tok_kind= token.analyze(audio_seg_org, audio_seg_LPF, audio_seg_HPF)
+                audio_seg_org = self.audio_data_org_[token_idx_s:token_idx_e]
+                audio_seg_LPF = self.audio_data_LPF_[token_idx_s:token_idx_e]
+                audio_seg_HPF = self.audio_data_HPF_[token_idx_s:token_idx_e]
 
-            if tok_kind == AudioToken.TKIND.TOK_MOVE1:
-                ave_duration_move1 += token.time_e_ - token.time_s_
-                cnt_move1 += 1
+                tok_kind= token.analyze(audio_seg_org, audio_seg_LPF, audio_seg_HPF)
 
-        # token分類2
-        #   (EFECT or MOVE2)の末尾に、MOVE1が含まれていれば分離
-        if cnt_move1 > 0:
-            ave_duration_move1 /= float(cnt_move1)
+                if tok_kind == AudioToken.TKIND.TOK_MOVE1:
+                    ave_duration_move1 += token.time_e_ - token.time_s_
+                    cnt_move1 += 1
 
-        insert_toks:List[Tuple[int,AudioToken]] = []
+            # token分類2
+            #   (EFECT or MOVE2)の末尾に、MOVE1が含まれていれば分離
+            if cnt_move1 > 0:
+                ave_duration_move1 /= float(cnt_move1)
 
-        for idx, token in enumerate(token_list):
-            if      (   (token.tok_kind_ == AudioToken.TKIND.TOK_EFECT) \
-                     or (token.tok_kind_ == AudioToken.TKIND.TOK_MOVE2)) \
-                and (token.duration_ > ave_duration_move1):
+            insert_toks:List[Tuple[int,AudioToken]] = []
 
-                ptok_time_s = token.time_e_ - ave_duration_move1
-                ptok_time_e = token.time_e_
-                ptok_idx_s = self.convTime2Idx(ptok_time_s)
-                ptok_idx_e = self.convTime2Idx(ptok_time_e)
+            for idx, token in enumerate(token_list):
+                if      (   (token.tok_kind_ == AudioToken.TKIND.TOK_EFECT) \
+                        or (token.tok_kind_ == AudioToken.TKIND.TOK_MOVE2)) \
+                    and (token.duration_ > ave_duration_move1):
 
-                audio_seg_org = self.audio_data_org_[ptok_idx_s:ptok_idx_e]
-                audio_seg_LPF = self.audio_data_LPF_[ptok_idx_s:ptok_idx_e]
-                audio_seg_HPF = self.audio_data_HPF_[ptok_idx_s:ptok_idx_e]
+                    ptok_time_s = token.time_e_ - ave_duration_move1
+                    ptok_time_e = token.time_e_
+                    ptok_idx_s = self.convTime2Idx(ptok_time_s)
+                    ptok_idx_e = self.convTime2Idx(ptok_time_e)
 
-                ptok_move1 = AudioToken(token.id_, 
-                                        ptok_time_s,
-                                        ptok_time_e,
-                                        AudioToken.TKIND.TOK_MOVE1)
+                    audio_seg_org = self.audio_data_org_[ptok_idx_s:ptok_idx_e]
+                    audio_seg_LPF = self.audio_data_LPF_[ptok_idx_s:ptok_idx_e]
+                    audio_seg_HPF = self.audio_data_HPF_[ptok_idx_s:ptok_idx_e]
 
-                ptok_move1.calcTokFeatures(audio_seg_org, audio_seg_LPF, audio_seg_HPF)
+                    ptok_move1 = AudioToken(token.id_, 
+                                            ptok_time_s,
+                                            ptok_time_e,
+                                            AudioToken.TKIND.TOK_MOVE1)
 
-                if ptok_move1.audio_rate_HPF_LPF_ > AudioToken.param_rate_lpf_hpf_th_:
-                    # [EFECT末尾の高周波/低周波割合が高い] EFECT or MOVE2末尾＝MOVE1
-                    token.time_e_ = ptok_time_s
-                    token.duration_ = token.time_e_ - token.time_s_
+                    ptok_move1.calcTokFeatures(audio_seg_org, audio_seg_LPF, audio_seg_HPF)
 
-                    insert_toks.append((idx+1, ptok_move1))
+                    if ptok_move1.audio_rate_HPF_LPF_ > AudioToken.param_rate_lpf_hpf_th_:
+                        # [EFECT末尾の高周波/低周波割合が高い] EFECT or MOVE2末尾＝MOVE1
+                        token.time_e_ = ptok_time_s
+                        token.duration_ = token.time_e_ - token.time_s_
 
-        # 分離したtokenを挿入
-        #   挿入後は後ろのindexがずれるので、indexが大きい方から順に挿入
-        for insert_tok in reversed(insert_toks):
-            loc = insert_tok[0]
-            tok = insert_tok[1]
-            token_list.insert(loc, tok)
+                        insert_toks.append((idx+1, ptok_move1))
 
-        # ID振りなおし
-        self.audio_token_ids_[:] = AudioToken.TOKEN_ID_NONE
+            # 分離したtokenを挿入
+            #   挿入後は後ろのindexがずれるので、indexが大きい方から順に挿入
+            for insert_tok in reversed(insert_toks):
+                loc = insert_tok[0]
+                tok = insert_tok[1]
+                token_list.insert(loc, tok)
 
-        for idx, token in enumerate(token_list):
-            token.id_ = idx + AudioToken.TOKEN_ID_START
+            # ID振りなおし
+            self.audio_token_ids_[:] = AudioToken.TOKEN_ID_NONE
 
-            idx_time_s = self.convTime2Idx(token.time_s_)
-            idx_time_e = self.convTime2Idx(token.time_e_)
-            self.audio_token_ids_[idx_time_s:idx_time_e] = token.id_
+            for idx, token in enumerate(token_list):
+                token.id_ = idx + AudioToken.TOKEN_ID_START
 
-        # 手を指した時刻を算出
-        move_times = []
-        for token in token_list:
-            if (token.tok_kind_ == AudioToken.TKIND.TOK_OPEN3) \
-                or (token.tok_kind_ == AudioToken.TKIND.TOK_MOVE1) \
-                or (token.tok_kind_ == AudioToken.TKIND.TOK_MOVE2) \
-                or (token.tok_kind_ == AudioToken.TKIND.TOK_EFECT) \
-                or (token.tok_kind_ == AudioToken.TKIND.TOK_END1):
+                idx_time_s = self.convTime2Idx(token.time_s_)
+                idx_time_e = self.convTime2Idx(token.time_e_)
+                self.audio_token_ids_[idx_time_s:idx_time_e] = token.id_
 
-                move_time = token.time_s_
+            # 手を指した時刻を算出
+            move_times = []
+            for token in token_list:
+                if (token.tok_kind_ == AudioToken.TKIND.TOK_OPEN3) \
+                    or (token.tok_kind_ == AudioToken.TKIND.TOK_MOVE1) \
+                    or (token.tok_kind_ == AudioToken.TKIND.TOK_MOVE2) \
+                    or (token.tok_kind_ == AudioToken.TKIND.TOK_EFECT) \
+                    or (token.tok_kind_ == AudioToken.TKIND.TOK_END1):
 
-                if token.tok_kind_ == AudioToken.TKIND.TOK_OPEN3:
-                    move_time += self.param_move_time_s_offset_
+                    move_time = token.time_s_
 
-                move_times.append(move_time)
+                    if token.tok_kind_ == AudioToken.TKIND.TOK_OPEN3:
+                        move_time += self.param_move_time_s_offset_
+
+                    move_times.append(move_time)
 
         return (np.array(move_times), token_list)
 
 
-    def extractFeature(self, audio:AudioSegment) -> np.ndarray:
+    def extractFeature(self, audio:AudioSegment) -> np.ndarray|None:
 
         self.audio_data_org_ = np.array(audio.get_array_of_samples())[::audio.channels]
 

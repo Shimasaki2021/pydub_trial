@@ -93,9 +93,9 @@ class ATStatus:
         return is_change_state
 
 class CanvasPaintEventArg:
-    def __init__(self, frame_no:int, frame_img:np.ndarray = None): # type: ignore
+    def __init__(self, frame_no:int, frame_img:np.ndarray|None = None):
         self.frame_no_  = frame_no
-        self.frame_img_:np.ndarray = None # type: ignore
+        self.frame_img_:np.ndarray|None = None 
         if frame_img is not None:
             self.frame_img_ = copy.deepcopy(frame_img)
         return
@@ -240,7 +240,9 @@ class AnalysisTool:
 
         self.movie_.load(path, int(self.cfg_["num_batch_frame"]))
 
-        if self.movie_.isOpened() == False:
+        if (self.movie_.isOpened() == False) \
+            or (self.movie_.audio_ is None):
+
             self.status_label_.config(text=f"Can't open movie file [{path}]")
 
         else:
@@ -277,7 +279,7 @@ class AnalysisTool:
 
     def onPaintFrame(self, event:tk.Event):
         frame_no = 0
-        frame_img:np.ndarray = None # type: ignore
+        frame_img:np.ndarray|None = None
 
         with self.canvas_event_lock_:
             frame_no = self.canvas_event_arg_.frame_no_
@@ -287,14 +289,14 @@ class AnalysisTool:
         self.showFrame(frame_no, frame_img)
         return
     
-    def sendPaintFrameEvent(self, frame_no:int, frame_img:np.ndarray = None): # type: ignore
+    def sendPaintFrameEvent(self, frame_no:int, frame_img:np.ndarray|None = None):
         with self.canvas_event_lock_:
             self.canvas_event_arg_ = CanvasPaintEventArg(frame_no, frame_img)
         
         self.canvas_.event_generate("<<PaintFrame>>")
         return 
 
-    def showFrame(self, frame_index:int, frame:np.ndarray=None): # type: ignore
+    def showFrame(self, frame_index:int, frame:np.ndarray|None=None):
         if self.movie_.isOpened() == True:
             
             ret = True
@@ -302,7 +304,7 @@ class AnalysisTool:
                 self.movie_.setCurFrame(frame_index)
                 ret, frame = self.movie_.getCurFrame()
 
-            if ret == True:
+            if (ret == True) and (frame is not None):
 
                 # frameを表示
                 frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)

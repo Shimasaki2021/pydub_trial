@@ -515,14 +515,14 @@ def evalScore(cur_score:int) -> Tuple[str,str]:
     return (str_color, str_game_status)
 
 # 日本語パス対応版 (https://qiita.com/SKYS/items/cbde3775e2143cad7455)
-def imread(filename, flags=cv2.IMREAD_COLOR, dtype=np.uint8) -> np.ndarray:
+def imread(filename, flags=cv2.IMREAD_COLOR, dtype=np.uint8) -> np.ndarray|None:
     try:
         n = np.fromfile(filename, dtype)
         img = cv2.imdecode(n, flags)
-        return img # type: ignore
+        return img
     except Exception as e:
         print(e)
-        return None # type: ignore
+        return None
 
 def makeScoreGraph(record_set:RecordSet, kif_dir:str, kif_filename:str) -> str:
     graph_outdir = kif_dir + "/" + kif_filename + "_graph"
@@ -593,7 +593,7 @@ def makeScoreGraph(record_set:RecordSet, kif_dir:str, kif_filename:str) -> str:
         # plt.savefig(graph_outfname,transparent=True) 
 
         # グラフ画像表示
-        im:np.ndarray = imread(graph_outfname)
+        im = imread(graph_outfname)
         if im is not None:
             cv2.imshow("graph",im)
             cv2.waitKey(1)
@@ -677,7 +677,7 @@ def makeAviutilExoFile(record_set:RecordSet, mov_fpath:str, graph_dirpath:str, k
     # movie = cv2.VideoCapture(mov_fpath)
 
     # if movie is not None:
-    if mov.isOpened() == True:
+    if (mov.isOpened() == True) and (mov.audio_ is not None) and (mov.cap_ is not None):
 
         mov_fdir  = os.path.dirname(mov_fpath)
         mov_fname = os.path.splitext(os.path.basename(mov_fpath))[0]
@@ -698,8 +698,9 @@ def makeAviutilExoFile(record_set:RecordSet, mov_fpath:str, graph_dirpath:str, k
         move_times = wars_audio_detect.extractFeature(mov.audio_)
 
         # 認識した時刻をrecord_setに反映
-        REST_ELAPSED_TIME_SEC = 6
-        record_set.assignTime(move_times, REST_ELAPSED_TIME_SEC, mov_total_sec)
+        if move_times is not None:
+            REST_ELAPSED_TIME_SEC = 6
+            record_set.assignTime(move_times, REST_ELAPSED_TIME_SEC, mov_total_sec)
 
         # 時刻調整
         # if len(last_time_s_str) > 0:
@@ -734,7 +735,10 @@ def makeAviutilExoFile(record_set:RecordSet, mov_fpath:str, graph_dirpath:str, k
             # スコアグラフ画像
             graph_img_fname = f"{graph_dirpath}/{GRAPH_IMG_PREFIX}{idx_record:03}.png"
             graph_img = imread(graph_img_fname)
-            (graph_img_h, graph_img_w, _) = graph_img.shape
+            if graph_img is not None:
+                (graph_img_h, graph_img_w, _) = graph_img.shape
+            else:
+                (graph_img_h, graph_img_w) = (0, 0)
 
             disp_img_w = max(mov_img_w, graph_img_w)
             disp_img_h = mov_img_h + graph_img_h
@@ -772,9 +776,10 @@ def makeAviutilExoFile(record_set:RecordSet, mov_fpath:str, graph_dirpath:str, k
                 if ret == True:
 
                     # スコアグラフ画像を重畳
-                    disp_img = np.zeros((disp_img_h, disp_img_w, 3), np.uint8)
-                    disp_img[0:graph_img_h, 0:graph_img_w, :] = graph_img[:,:,:]
-                    disp_img[graph_img_h:disp_img_h, :, :]    = mov_img[:,:,:]
+                    if (graph_img is not None) and (mov_img is not None):
+                        disp_img = np.zeros((disp_img_h, disp_img_w, 3), np.uint8)
+                        disp_img[0:graph_img_h, 0:graph_img_w, :] = graph_img[:,:,:]
+                        disp_img[graph_img_h:disp_img_h, :, :]    = mov_img[:,:,:]
 
                     cv2.imshow("movie", disp_img)
                     cv2.waitKey(1)
@@ -862,11 +867,11 @@ def main(player_name:str):
             # if math.isclose(record_set.getTailRecord().disp_time_e, 0.0) == False:
             #     # [時刻ありkifの場合]
             #     last_time_s_str = simpledialog.askstring("最終手の時刻入力", "最終手の時刻を入力してください(mm:ss)")
-            #     while is_mm_ss_format(last_time_s_str) == False: # type: ignore
+            #     while is_mm_ss_format(last_time_s_str) == False: 
             #         last_time_s_str = simpledialog.askstring("最終手の時刻入力", "最終手の時刻を入力してください(mm:ss)")
             #         print(last_time_s_str)
 
-            #     makeAviutilExoFile(record_set, mov_fpath, outdir_graph, kif_fname, last_time_s_str) # type: ignore
+            #     makeAviutilExoFile(record_set, mov_fpath, outdir_graph, kif_fname, last_time_s_str) 
             
             # else:
             #     # [時刻なしkifの場合]

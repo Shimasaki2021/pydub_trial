@@ -23,7 +23,7 @@ class IntEnum0(IntEnum):
 class MovieLoader:
     """ 動画読み込み
     """
-    def __init__(self, movie_fpath:str = None, play_fps=-1.0, num_batch_frame=1): # type: ignore
+    def __init__(self, movie_fpath:str|None = None, play_fps=-1.0, num_batch_frame=1): 
         """ コンストラクタ
 
         Args:
@@ -31,8 +31,8 @@ class MovieLoader:
             play_fps (float, optional)     : 再生速度(fps). Defaults to -1.0.
             num_batch_frame (int, optional): 一度に読み込む（バッチ処理する）フレーム数[frame/cycle]. Defaults to 1.
         """
-        self.cap_:cv2.VideoCapture = None # type: ignore
-        self.audio_:AudioSegment = None # type: ignore
+        self.cap_:cv2.VideoCapture|None = None 
+        self.audio_:AudioSegment|None = None 
         self.cur_frame_no_    = 0
         self.num_cap_frame_   = 0
         self.play_fps_        = play_fps
@@ -44,8 +44,11 @@ class MovieLoader:
         return
 
     def release(self):
-        self.cap_.release()
-        self.audio_ = None # type: ignore
+        if self.cap_ is not None:
+            self.cap_.release()
+            self.cap_ = None
+
+        self.audio_ = None
         self.cur_frame_no_    = 0
         self.num_cap_frame_   = 0
         self.play_fps_        = 0.0
@@ -65,7 +68,7 @@ class MovieLoader:
         if self.cap_ is not None:
             self.cap_.release()
         if self.audio_ is not None:
-            self.audio_ = None # type: ignore
+            self.audio_ = None 
 
         self.cap_ = cv2.VideoCapture(movie_fpath)
 
@@ -102,7 +105,7 @@ class MovieLoader:
     def __iter__(self):
         return self
 
-    def __next__(self) -> Tuple[List[int], List[np.ndarray], AudioSegment]:
+    def __next__(self) -> Tuple[List[int], List[np.ndarray], AudioSegment|None]:
         """ 画像読み込み
 
         Raises:
@@ -120,27 +123,32 @@ class MovieLoader:
             raise StopIteration()
 
         # フレーム読み込み
-        self.cur_frame_no_ = int(self.cap_.get(cv2.CAP_PROP_POS_FRAMES)) 
-        while (len(ret_batch_frame_nos) < self.num_batch_frame_) and (self.cur_frame_no_ < self.num_cap_frame_):
+        self.cur_frame_no_ = 0
+        if self.cap_ is not None:
+            self.cur_frame_no_ = int(self.cap_.get(cv2.CAP_PROP_POS_FRAMES)) 
 
-            img_org:np.ndarray = None # type: ignore
-            (_, img_org) = self.cap_.read()
+            while (len(ret_batch_frame_nos) < self.num_batch_frame_) and (self.cur_frame_no_ < self.num_cap_frame_):
 
-            if (img_org is not None) and (self.cur_frame_no_ % self.frame_play_step_ == 0):
-                ret_batch_frame_nos.append(self.cur_frame_no_)
-                ret_batch_imgs.append(copy.deepcopy(img_org))
+                img_org:np.ndarray|None = None
+                (_, img_org) = self.cap_.read()
 
-            self.cur_frame_no_ = int(self.cap_.get(cv2.CAP_PROP_POS_FRAMES))
+                if (img_org is not None) and (self.cur_frame_no_ % self.frame_play_step_ == 0):
+                    ret_batch_frame_nos.append(self.cur_frame_no_)
+                    ret_batch_imgs.append(copy.deepcopy(img_org))
+
+                self.cur_frame_no_ = int(self.cap_.get(cv2.CAP_PROP_POS_FRAMES))
 
         # Audio読み込み
-        cap_fps = self.getMovieFps()
-        time_st_sec = float(ret_batch_frame_nos[0]) / cap_fps
-        time_ed_sec = float(ret_batch_frame_nos[-1]) / cap_fps
-        ret_audio = self.audio_[int(time_st_sec*1000.0): int(time_ed_sec*1000.0)]
+        ret_audio:AudioSegment|None = None
+        if self.audio_ is not None:
+            cap_fps = self.getMovieFps()
+            time_st_sec = float(ret_batch_frame_nos[0]) / cap_fps
+            time_ed_sec = float(ret_batch_frame_nos[-1]) / cap_fps
+            ret_audio = self.audio_[int(time_st_sec*1000.0): int(time_ed_sec*1000.0)] # type: ignore
 
 
         # 動画フレーム画像、フレーム番号を返す（バッチ処理分のリスト）
-        return (ret_batch_frame_nos, ret_batch_imgs, ret_audio) # type: ignore
+        return (ret_batch_frame_nos, ret_batch_imgs, ret_audio)
 
     def __len__(self) -> int:
         num_iter = int(self.num_cap_frame_ // (self.num_batch_frame_ * self.frame_play_step_))
@@ -150,15 +158,20 @@ class MovieLoader:
         return self.num_cap_frame_
 
     def getFrameSize(self) -> Tuple[int,int]:
-        frame_w = int(self.cap_.get(cv2.CAP_PROP_FRAME_WIDTH))
-        frame_h = int(self.cap_.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        frame_w = 0
+        frame_h = 0
+        if self.cap_ is not None:
+            frame_w = int(self.cap_.get(cv2.CAP_PROP_FRAME_WIDTH))
+            frame_h = int(self.cap_.get(cv2.CAP_PROP_FRAME_HEIGHT))
         return (frame_w, frame_h)
 
     def getPlayFps(self) -> float:
         return self.play_fps_
     
     def getMovieFps(self) -> float:
-        cap_fps = self.cap_.get(cv2.CAP_PROP_FPS)
+        cap_fps = 0.0
+        if self.cap_ is not None:
+            cap_fps = self.cap_.get(cv2.CAP_PROP_FPS)
         return cap_fps
 
     def resetIter(self):
@@ -166,12 +179,15 @@ class MovieLoader:
         return
 
     def setCurFrame(self, frame_no:int):
-        self.cur_frame_no_ = frame_no
-        self.cap_.set(cv2.CAP_PROP_POS_FRAMES, float(self.cur_frame_no_))
+        if self.cap_ is not None:
+            self.cur_frame_no_ = frame_no
+            self.cap_.set(cv2.CAP_PROP_POS_FRAMES, float(self.cur_frame_no_))
         return
     
-    def getCurFrame(self) -> Tuple[bool, np.ndarray]:
-        (ret, img) = self.cap_.read()
+    def getCurFrame(self) -> Tuple[bool, np.ndarray|None]:
+        ret = False
+        if self.cap_ is not None:
+            (ret, img) = self.cap_.read()
         return (ret, img)
 
     def nextCurFrame(self) -> bool:
