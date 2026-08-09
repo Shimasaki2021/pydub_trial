@@ -29,6 +29,7 @@ class AudioToken:
     param_rate_hpf_org_th_ = 0.0
     param_rate_lpf_org_th_ = 0.0
     param_rate_lpf_hpf_th_ = 0.0
+    param_rate_lpf_hpf_th2_ = 0.0
 
     class TKIND(IntEnum0):
         TOK_UNKNOWN = auto()
@@ -67,6 +68,7 @@ class AudioToken:
         cls.param_rate_hpf_org_th_ = float(cfg["token_kind_rate_hpf_th"])
         cls.param_rate_lpf_org_th_ = float(cfg["token_kind_rate_lpf_th"])
         cls.param_rate_lpf_hpf_th_ = float(cfg["token_kind_rate_lpf_hpf_th"])
+        cls.param_rate_lpf_hpf_th2_ = float(cfg["token_kind_rate_lpf_hpf_th2"])
         return
 
     @staticmethod
@@ -375,7 +377,9 @@ class WarsAudioDetector:
 
                     ptok_move1.calcTokFeatures(audio_seg_org, audio_seg_LPF, audio_seg_HPF)
 
-                    if ptok_move1.audio_rate_HPF_LPF_ > AudioToken.param_rate_lpf_hpf_th_:
+                    if (ptok_move1.audio_rate_HPF_LPF_ > AudioToken.param_rate_lpf_hpf_th_) \
+                        or (ptok_move1.audio_rate_HPF_org_ > AudioToken.param_rate_lpf_hpf_th2_):
+
                         # [EFECT末尾の高周波/低周波割合が高い] EFECT or MOVE2末尾＝MOVE1
                         token.time_e_ = ptok_time_s
                         token.duration_ = token.time_e_ - token.time_s_
@@ -619,6 +623,7 @@ cfg = {
     "token_kind_rate_hpf_th" : 0.1, # token分類閾値: 高周波割合(hpf/org)
     "token_kind_rate_lpf_th" : 0.7, # token分類閾値: 低周波割合(lpf/org)
     "token_kind_rate_lpf_hpf_th" : 0.6, # token分類閾値: 高周波,低周波割合(hpf/lpf)
+    "token_kind_rate_lpf_hpf_th2" : 0.2, # token分類閾値: 高周波,org割合(hpf/org)
 
     "move_time_start_offset" : 0.51, # 手を指した時刻算出: 開始token(OPEN3)時刻offset
 
