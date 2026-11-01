@@ -205,6 +205,7 @@ class WarsAudioDetector:
         self.param_token_s_th_ = float(cfg["token_s_th"])
         self.param_token_e_th_ = float(cfg["token_e_th"])
         self.token_idxs_efect_in_move1_ = list(cfg["token_idxs_efect_in_move1"])
+        self.token_idxs_efect_notin_move1_ = list(cfg["token_idxs_efect_notin_move1"])
 
         self.param_move_time_s_offset_ = float(cfg["move_time_start_offset"])
 
@@ -386,11 +387,14 @@ class WarsAudioDetector:
                         or (ptok_move1.audio_rate_HPF_org_ > AudioToken.param_rate_lpf_hpf_th2_) \
                         or (cur_idx_token_efect in self.token_idxs_efect_in_move1_):
 
-                        # [EFECT末尾の高周波/低周波割合が高い] EFECT or MOVE2末尾＝MOVE1
-                        token.time_e_ = ptok_time_s
-                        token.duration_ = token.time_e_ - token.time_s_
+                        if not (cur_idx_token_efect in self.token_idxs_efect_notin_move1_):
+                            # [EFECT末尾の高周波/低周波割合が高い] EFECT or MOVE2末尾＝MOVE1
+                            token.time_e_ = ptok_time_s
+                            token.duration_ = token.time_e_ - token.time_s_
 
-                        insert_toks.append((idx+1, ptok_move1))
+                            insert_toks.append((idx+1, ptok_move1))
+
+                            print(f"Inserted: {cur_idx_token_efect}, {ptok_time_s}, {ptok_move1.audio_rate_HPF_LPF_}, {ptok_move1.audio_rate_HPF_org_}")
 
             # 分離したtokenを挿入
             #   挿入後は後ろのindexがずれるので、indexが大きい方から順に挿入
@@ -631,8 +635,11 @@ cfg = {
     "token_kind_rate_lpf_hpf_th" : 0.6, # token分類閾値: 高周波,低周波割合(hpf/lpf)
     "token_kind_rate_lpf_hpf_th2" : 0.2, # token分類閾値: 高周波,org割合(hpf/org)
 
-    "token_idxs_efect_in_move1" : [1], # MOVE1が含まれるEFECT, MOVE2（先頭から数えて何番目か？1はじまり)
-    # "token_idxs_efect_in_move1" : [-1], # MOVE1が含まれるEFECT, MOVE2が1つもない場合はこちらを指定
+    # "token_idxs_efect_in_move1" : [1], # MOVE1が含まれるEFECT, MOVE2（先頭から数えて何番目か？1はじまり)
+    "token_idxs_efect_in_move1" : [-1], # MOVE1が含まれるEFECT, MOVE2が1つもない場合はこちらを指定
+
+    # "token_idxs_efect_notin_move1" : [1], # MOVE1が含まれないEFECT, MOVE2（先頭から数えて何番目か？1はじまり)
+    "token_idxs_efect_notin_move1" : [-1], # MOVE1が含まれないEFECT, MOVE2が1つもない場合はこちらを指定
 
     "move_time_start_offset" : 0.51, # 手を指した時刻算出: 開始token(OPEN3)時刻offset
 
