@@ -43,6 +43,30 @@ class AudioToken:
         TOK_END1  = auto()
         TOK_END2  = auto()
 
+        @staticmethod
+        def __str__(val) -> str:
+            ret_str = "TOK_UNKNOWN"
+            if val == AudioToken.TKIND.TOK_OPEN1:
+                ret_str = "TOK_OPEN1"
+            elif val == AudioToken.TKIND.TOK_OPEN2:
+                ret_str = "TOK_OPEN2"
+            elif val == AudioToken.TKIND.TOK_OPEN3:
+                ret_str = "TOK_OPEN3"
+            elif val == AudioToken.TKIND.TOK_MOVE1:
+                ret_str = "TOK_MOVE1"
+            elif val == AudioToken.TKIND.TOK_MOVE2:
+                ret_str = "TOK_MOVE2"
+            elif val == AudioToken.TKIND.TOK_EFECT:
+                ret_str = "TOK_EFECT"
+            elif val == AudioToken.TKIND.TOK_TIME:
+                ret_str = "TOK_TIME"
+            elif val == AudioToken.TKIND.TOK_END1:
+                ret_str = "TOK_END1"
+            else:
+                ret_str = "TOK_END2"
+
+            return ret_str
+
     def __init__(self, id=TOKEN_ID_NONE, time_s=-1.0, time_e=-1.0, tok_kind=TKIND.TOK_UNKNOWN):
         self.id_ = id
         self.time_s_ = time_s
@@ -432,7 +456,7 @@ class WarsAudioDetector:
         return (np.array(move_times), token_list)
 
 
-    def extractFeature(self, audio:AudioSegment) -> np.ndarray|None:
+    def extractFeature(self, audio:AudioSegment) -> Tuple[np.ndarray|None,np.ndarray]:
 
         self.audio_data_org_ = np.array(audio.get_array_of_samples())[::audio.channels]
 
@@ -474,7 +498,12 @@ class WarsAudioDetector:
             (self.audio_token_ids_, self.audio_tokens_) = self.extractTokens(self.audio_data_org_)
             (self.move_times_, self.audio_tokens_) = self.analyzeTokens(self.audio_tokens_)
 
-        return self.move_times_
+        # トークン種別を取得
+        tokens_kind = []
+        if self.audio_tokens_ is not None:
+            tokens_kind = [tok.tok_kind_ for tok in self.audio_tokens_]
+
+        return (self.move_times_, np.array(tokens_kind))
 
     def convTime2Idx(self, time_cur_sec:float) -> int:
         idx = int(time_cur_sec * self.audio_sample_fps_)
@@ -635,7 +664,7 @@ cfg = {
     "token_kind_rate_lpf_hpf_th" : 0.6, # token分類閾値: 高周波,低周波割合(hpf/lpf)
     "token_kind_rate_lpf_hpf_th2" : 0.2, # token分類閾値: 高周波,org割合(hpf/org)
 
-    # "token_idxs_efect_in_move1" : [1], # MOVE1が含まれるEFECT, MOVE2（先頭から数えて何番目か？1はじまり)
+    # "token_idxs_efect_in_move1" : [3,4], # MOVE1が含まれるEFECT, MOVE2（先頭から数えて何番目か？1はじまり)
     "token_idxs_efect_in_move1" : [-1], # MOVE1が含まれるEFECT, MOVE2が1つもない場合はこちらを指定
 
     # "token_idxs_efect_notin_move1" : [1], # MOVE1が含まれないEFECT, MOVE2（先頭から数えて何番目か？1はじまり)

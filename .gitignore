@@ -5,3 +5,4 @@ test_*
 analysis_tool_design.xlsx
 ~$analysis_tool_design.xlsx
 __pycache__/
+tmp/

@@ -17,7 +17,7 @@ import cv2
 import numpy as np
 
 from common import MovieLoader
-from det_shogiwars_move import WarsAudioDetector
+from det_shogiwars_move import WarsAudioDetector, AudioToken
 from det_shogiwars_move import cfg as audio_detect_cfg
 
 GRAPH_IMG_PREFIX = "F"
@@ -83,6 +83,7 @@ class Record:
         self.is_sente        = False
         self.is_players_move = False
         self.is_bad_move     = False
+        self.token_kind_     = AudioToken.TKIND.TOK_UNKNOWN
 
         self.score            = 0
         self.elapsed_time_str = ""
@@ -107,6 +108,7 @@ class Record:
         self.is_sente        = False
         self.is_players_move = False
         self.is_bad_move     = False
+        self.token_kind_     = AudioToken.TKIND.TOK_UNKNOWN
 
         self.score            = 0
         self.elapsed_time_str = ""
@@ -215,6 +217,13 @@ class Record:
         if self.move_kind != "":
             ret_str += " (" + self.move_kind + ")"
         return ret_str
+
+    def outCsvLog(self, csv_fp:io.TextIOWrapper):
+        line_str  = f"{self.no},{self.move},{self.score},"
+        line_str += f"{self.move_extinfo},{self.move_kind},"
+        line_str += f"{AudioToken.TKIND.__str__(self.token_kind_)}\n"
+        csv_fp.write(line_str)
+        return
 
 class RecordSet:
 
@@ -418,6 +427,16 @@ class RecordSet:
                 cur_record.disp_time_e = cur_record.disp_time_s + elapsed_time_for_rest
 
             cur_disp_time_s = cur_record.disp_time_e
+
+        return
+
+    def setTokenKinds(self, token_kinds:np.ndarray):
+        if len(token_kinds) > 0:
+            idx_record = 0
+            for token in token_kinds:
+                if (token >= AudioToken.TKIND.TOK_OPEN3) and (idx_record < len(self.records)):
+                    self.records[idx_record].token_kind_ = token
+                    idx_record += 1
 
         return
 
@@ -695,12 +714,15 @@ def makeAviutilExoFile(record_set:RecordSet, mov_fpath:str, graph_dirpath:str, k
 
         # 効果音から、各手の時刻を認識
         wars_audio_detect = WarsAudioDetector(audio_detect_cfg)
-        move_times = wars_audio_detect.extractFeature(mov.audio_)
+        (move_times, token_kinds) = wars_audio_detect.extractFeature(mov.audio_)
 
         # 認識した時刻をrecord_setに反映
         if move_times is not None:
             REST_ELAPSED_TIME_SEC = 6
             record_set.assignTime(move_times, REST_ELAPSED_TIME_SEC, mov_total_sec)
+
+        # 認識したトークン種別をrecord_setに反映
+        record_set.setTokenKinds(token_kinds)
 
         # 時刻調整
         # if len(last_time_s_str) > 0:
@@ -718,6 +740,10 @@ def makeAviutilExoFile(record_set:RecordSet, mov_fpath:str, graph_dirpath:str, k
         #         record_set.createTime(int(ave_elapsed_time_sec_mov))
 
         # record_set.debugOut(mov_fdir)
+
+        # ログファイル作成
+        log_fpath = f"{mov_fdir}/{kif_fname}.csv"
+        log_file = open(log_fpath, "w", encoding="shift_jis", newline="\r\n")
 
         # exoファイルを作成
         # https://qiita.com/tset-tset-tset/items/e245c9c1a4fdbb18cf6d
@@ -765,6 +791,7 @@ def makeAviutilExoFile(record_set:RecordSet, mov_fpath:str, graph_dirpath:str, k
                         "mov_pos_y":-(disp_img_h - graph_img_h)/2,
                         "graph_img_fpath":graph_img_fname}
             writeExo(exo_file, 1, out_info)
+            cur_record.outCsvLog(log_file) # ログ出力
 
             ms_now = 0.0
             is_out_tailrecord = False
@@ -808,6 +835,7 @@ def makeAviutilExoFile(record_set:RecordSet, mov_fpath:str, graph_dirpath:str, k
                                 out_info["frame_end_idx"]   = cur_record_time_e_idx
                                 out_info["graph_img_fpath"] = graph_img_fname
                                 writeExo(exo_file, idx_record + 1, out_info)
+                                cur_record.outCsvLog(log_file) # ログ出力
 
                         except StopIteration as e:
                             pass
@@ -820,10 +848,12 @@ def makeAviutilExoFile(record_set:RecordSet, mov_fpath:str, graph_dirpath:str, k
                             out_info["frame_end_idx"]   = prev_record_time_e_idx + 30
                             out_info["graph_img_fpath"] = graph_img_fname
                             writeExo(exo_file, idx_record + 1, out_info)
+                            cur_record.outCsvLog(log_file) # ログ出力
                             is_out_tailrecord = True
 
                     ms_now += mov_ms_per_frame
 
+        log_file.close()
 
         mov.release()
 
